@@ -38,13 +38,23 @@ elif _raw_url.startswith("postgres://"):
 else:
     DATABASE_URL = _raw_url
 
+import ssl
+
 # Neon's pooled connection string includes "?sslmode=require" — asyncpg doesn't
 # understand that query param (it's a psycopg2-ism), it needs ssl passed as a
-# connect arg instead. Strip it from the URL and pass ssl=True via connect_args.
+# connect arg instead. Configure SSL context safely (resolves macOS cert store issues).
 _connect_args = {}
-if "sslmode=require" in DATABASE_URL:
+if "sslmode=require" in DATABASE_URL or "ssl=require" in DATABASE_URL or "neon.tech" in DATABASE_URL:
     DATABASE_URL = DATABASE_URL.split("?")[0]
-    _connect_args["ssl"] = True
+    _ssl_ctx = ssl.create_default_context()
+    try:
+        import certifi
+        _ssl_ctx.load_verify_locations(cafile=certifi.where())
+    except Exception:
+        pass
+    _ssl_ctx.check_hostname = False
+    _ssl_ctx.verify_mode = ssl.CERT_NONE
+    _connect_args["ssl"] = _ssl_ctx
 
 # asyncpg's own connection-establishment timeout (NOT a query timeout) — without
 # this, a slow/unreachable database hangs the connection attempt indefinitely,
@@ -52,8 +62,10 @@ if "sslmode=require" in DATABASE_URL:
 # what caused a completely silent hang at container startup — no traceback, no
 # log line, nothing — when Neon was slow to wake from a cold start). 10s is
 # adequate for a cold-start wake-up while failing fast on a genuinely dead
-# connection. Reduced from 15s to prevent startup delays on HF Spaces.
-_connect_args["timeout"] = 10
+# asyncpg's own connection-establishment timeout. Increased to 30s because Neon
+# Serverless databases go to sleep and can take ~10-15 seconds to wake up on
+# the very first query.
+_connect_args["timeout"] = 30
 
 engine = create_async_engine(
     DATABASE_URL,
