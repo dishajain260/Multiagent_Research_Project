@@ -1,6 +1,4 @@
-# main.py
-# FastAPI app entry point — registers routes, configures CORS.
-
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from retrieval.embedding_model import get_embedding_model
@@ -18,30 +16,23 @@ app = FastAPI(
     version="2.0.0",
 )
 
-# CORS: allow the deployed Vercel frontend (production + preview URLs).
-# No trailing slash on any origin — browsers send Origin without one,
-# so a trailing slash here would silently fail to match.
-#
-# localhost origins added for local dev (`npm run dev` defaults to 5173,
-# but Vite falls back to 5174/5175 etc. if 5173 is already taken — listing
-# a few common fallbacks so this doesn't break on a random free port).
+# CORS: allow local development and cloud-deployed frontends (Vercel, Netlify, Render, etc.)
+origins = [
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://localhost:5175",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:5174",
+]
+
+frontend_env = os.getenv("FRONTEND_URL")
+if frontend_env:
+    origins.append(frontend_env.rstrip("/"))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://multi-agent-rag-research-assistant.vercel.app",
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "http://localhost:5175",
-        "http://127.0.0.1:5173",
-    ],
-    allow_origin_regex=r"https://multi-agent-rag-research-assistant-.*\.vercel\.app",
-    # allow_credentials=True is harmless to leave on but no longer load-
-    # bearing for auth: the frontend switched from httpOnly cookies to a
-    # Bearer token in the Authorization header (see auth/dependencies.py),
-    # specifically to sidestep an HF Spaces proxy bug that drops the
-    # Access-Control-Allow-Credentials header on preflight requests. Bearer
-    # tokens don't use the browser's credentialed-request mode, so this
-    # setting simply isn't checked anymore for the auth flow.
+    allow_origins=origins,
+    allow_origin_regex=r"https://.*(\.vercel\.app|\.netlify\.app|\.onrender\.com|\.railway\.app)",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
