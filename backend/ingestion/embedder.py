@@ -1,0 +1,249 @@
+# embedder.py
+# Responsibility: Embed chunks and store them in Qdrant.
+#
+# Flow:
+#   chunks → embed child text → push vector + full metadata to Qdrant
+#
+# Key design decisions:
+#   - Only the child "text" gets embedded (small, precise)
+#   - parent_text travels as payload (not embedded)
+#   - We batch embed for efficiency (not one-by-one API calls)
+#   - Collection is created if it doesn't exist (idempotent)
+#   - Point IDs are DETERMINISTIC (derived from chunk_id), not random —
+#     this makes re-running embedder.py on the same PDF idempotent:
+#     it overwrites existing points instead of creating duplicates.
+#   - Embedding model is lazy-loaded via get_embedding_model() — not loaded
+#     at import time, to reduce memory footprint on constrained hosts (Render
+#     free tier hit 512MB OOM when the model loaded eagerly on both this
+#     module and retriever.py at startup).
+
+from qdrant_client import QdrantClient
+from qdrant_client.models import (
+    Distance,
+    VectorParams,
+    PointStruct,
+    PayloadSchemaType,
+)
+import uuid
+import hashlib
+import os
+import gc
+from dotenv import load_dotenv
+from retrieval.embedding_model import get_embedding_model
+
+load_dotenv()
+
+# ── Constants ───────────────────────────────────────────────────────────────
+
+COLLECTION_NAME = "research_documents"
+EMBEDDING_DIM   = 384        # all-MiniLM-L6-v2 output dimension
+BATCH_SIZE      = 32         # how many chunks to embed + upload at once
+
+
+# ── Init ────────────────────────────────────────────────────────────────────
+
+# Qdrant Cloud connection — was QdrantClient(host="localhost", port=6333).
+# Cloud requires a full URL + API key rather than host/port, since it's
+# authenticated over HTTPS rather than an unauthenticated local Docker instance.
+qdrant = QdrantClient(
+    url=os.getenv("QDRANT_URL"),
+    api_key=os.getenv("QDRANT_API_KEY"),
+)
+
+
+# ── Collection Setup ────────────────────────────────────────────────────────
+
+def ensure_collection_exists():
+    """
+    Create the Qdrant collection if it doesn't already exist.
+    Idempotent: safe to call multiple times.
+    """
+    existing = [c.name for c in qdrant.get_collections().collections]
+
+    if COLLECTION_NAME not in existing:
+        qdrant.create_collection(
+            collection_name=COLLECTION_NAME,
+            vectors_config=VectorParams(
+                size=EMBEDDING_DIM,
+                distance=Distance.COSINE
+            )
+        )
+        print(f"Created collection: {COLLECTION_NAME}")
+    else:
+        print(f"Collection already exists: {COLLECTION_NAME}")
+
+    # Qdrant Cloud requires an explicit payload index to filter on a field
+    # (e.g. document_scope filtering by source_file in retriever.py).
+    # Without this, query_points() with a Filter on source_file returns
+    # a 400 error: "Index required but not found for source_file".
+    # create_payload_index is idempotent — safe to call even if it exists.
+    qdrant.create_payload_index(
+        collection_name=COLLECTION_NAME,
+        field_name="source_file",
+        field_schema=PayloadSchemaType.KEYWORD,
+    )
+    print("Ensured payload index on 'source_file'")
+
+    # Phase 8: same requirement for user_id — retriever.py now filters on it
+    # too (see retriever.py's retrieve()), so it needs its own index or that
+    # filter will 400 the same way source_file did before this index existed.
+    qdrant.create_payload_index(
+        collection_name=COLLECTION_NAME,
+        field_name="user_id",
+        field_schema=PayloadSchemaType.KEYWORD,
+    )
+    print("Ensured payload index on 'user_id'")
+
+
+# ── Point ID Generation ──────────────────────────────────────────────────────
+
+def chunk_id_to_point_id(chunk_id: str, user_id: str | None = None) -> str:
+    """
+    Deterministic UUID derived from chunk_id AND user_id.
+
+    Why user_id is included:
+    If two users upload a file with the same name, chunk_id (which is derived
+    from filename + page + index) would be identical for both. Without user_id
+    in the hash, upsert() silently overwrites User A's point with User B's —
+    causing cross-user data corruption. Including user_id in the hash makes
+    each user's point IDs independent even for identical filenames.
+    """
+    key = f"{user_id}:{chunk_id}" if user_id else chunk_id
+    return str(uuid.UUID(hashlib.md5(key.encode()).hexdigest()))
+
+
+# ── Embedding ───────────────────────────────────────────────────────────────
+
+def embed_chunks_and_upload(chunks: list[dict], qdrant_client, collection_name: str, batch_size: int = 8, user_id: str | None = None) -> int:
+    """
+    Embed and upload chunks in small batches to avoid holding all chunks'
+    embeddings in memory simultaneously — critical on memory-constrained
+    hosts (Render free tier: 512MB). Large documents (20+ chunks) were
+    causing OOM when the full batch was embedded before any upload happened.
+
+    user_id is REQUIRED for data isolation. Every point must carry a user_id
+    payload field so retriever.py's FieldCondition filter can exclude other
+    users' documents. Points without user_id would leak to all users.
+    """
+    if not user_id:
+        raise ValueError("user_id is required for ingestion — unauthenticated uploads are not allowed.")
+
+    model = get_embedding_model()
+    total_uploaded = 0
+
+    for i in range(0, len(chunks), batch_size):
+        batch = chunks[i:i + batch_size]
+        texts = [chunk["text"] for chunk in batch]
+
+        embeddings = list(model.embed(texts))  # only this small batch in memory
+
+        points = []
+        for chunk, embedding in zip(batch, embeddings):
+            payload = {
+                "text": chunk["text"],
+                "parent_text": chunk["parent_text"],
+                "page_number": chunk["page_number"],
+                "source_file": chunk["source_file"],
+                "section_header": chunk["section_header"],
+                "chunk_id": chunk["chunk_id"],
+                "parent_chunk_id": chunk["parent_chunk_id"],
+                "chunk_index": chunk["chunk_index"],
+                "chunk_type": chunk["chunk_type"],
+                "user_id": user_id,  # always set — required for data isolation
+            }
+            points.append(
+                PointStruct(
+                    id=chunk_id_to_point_id(chunk["chunk_id"], user_id=user_id),
+                    vector=embedding.tolist(),
+                    payload=payload,
+                )
+            )
+
+        qdrant_client.upsert(collection_name=collection_name, points=points)
+        total_uploaded += len(points)
+        print(f"Uploaded batch {i // batch_size + 1}: {len(points)} points")
+
+        del embeddings, points  # explicit release
+        gc.collect()            # force cleanup before next batch
+    return total_uploaded
+
+# ── Qdrant Upload ────────────────────────────────────────────────────────────
+
+def upload_to_qdrant(chunks: list[dict]) -> int:
+    """
+    Upload embedded chunks to Qdrant as points.
+
+    Point ID is now derived deterministically from chunk_id (see
+    chunk_id_to_point_id) instead of a random UUID — re-uploading the
+    same PDF overwrites existing points rather than duplicating them.
+    """
+    points = []
+
+    for chunk in chunks:
+        payload = {
+            "text":            chunk["text"],
+            "parent_text":     chunk["parent_text"],
+            "page_number":     chunk["page_number"],
+            "source_file":     chunk["source_file"],
+            "section_header":  chunk["section_header"],
+            "chunk_id":        chunk["chunk_id"],
+            "parent_chunk_id": chunk["parent_chunk_id"],
+            "chunk_index":     chunk["chunk_index"],
+            "chunk_type":      chunk["chunk_type"],
+        }
+
+        points.append(
+            PointStruct(
+                id=chunk_id_to_point_id(chunk["chunk_id"]),   # ← deterministic, not random
+                vector=chunk["embedding"],
+                payload=payload
+            )
+        )
+
+    for i in range(0, len(points), BATCH_SIZE):
+        batch = points[i : i + BATCH_SIZE]
+        qdrant.upsert(
+            collection_name=COLLECTION_NAME,
+            points=batch
+        )
+
+    print(f"Uploaded {len(points)} points to Qdrant collection '{COLLECTION_NAME}'")
+    return len(points)
+
+
+# ── Main Pipeline Function ───────────────────────────────────────────────────
+
+def embed_and_store(chunks: list[dict], user_id: str | None = None) -> int:
+    ensure_collection_exists()
+    count = embed_chunks_and_upload(chunks, qdrant, COLLECTION_NAME, batch_size=4, user_id=user_id)
+    return count
+
+
+# ── Quick test ───────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    import sys
+    import os
+
+    sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+    from ingestion.pdf_parser import parse_pdf
+    from ingestion.chunker   import chunk_pages
+
+    if len(sys.argv) < 2:
+        print("Usage: python embedder.py <path_to_pdf>")
+        sys.exit(1)
+
+    print("Step 1: Parsing PDF...")
+    pages = parse_pdf(sys.argv[1])
+    print(f"  → {len(pages)} pages extracted")
+
+    print("Step 2: Chunking...")
+    chunks = chunk_pages(pages)
+    print(f"  → {len(chunks)} chunks created")
+
+    print("Step 3: Embedding + storing in Qdrant...")
+    count = embed_and_store(chunks)
+
+    print(f"\n✓ Done. {count} vectors stored in Qdrant.")
+    print(f"  Open Qdrant Cloud dashboard → Collections → {COLLECTION_NAME}")
+    print(f"  You should see {count} points.")
