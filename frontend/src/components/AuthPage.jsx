@@ -91,6 +91,23 @@ export default function AuthPage({ onBack, theme, onToggleTheme }) {
             AXIOM / RAG
           </div>
 
+          <div className="auth-tabs">
+            <button
+              type="button"
+              className={`auth-tab ${mode === "login" ? "active" : ""}`}
+              onClick={() => { setMode("login"); setError(""); }}
+            >
+              Sign In
+            </button>
+            <button
+              type="button"
+              className={`auth-tab ${mode === "signup" ? "active" : ""}`}
+              onClick={() => { setMode("signup"); setError(""); }}
+            >
+              Create Account
+            </button>
+          </div>
+
           <h2 className="auth-title">
             {mode === "login" ? "Sign in" : "Create account"}
           </h2>
