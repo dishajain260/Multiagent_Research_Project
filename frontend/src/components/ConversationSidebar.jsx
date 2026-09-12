@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { getConversations } from "../api";
 import ThemeToggle from "./ThemeToggle";
-import BB8Toggle from "./BB8Toggle";
 
 export default function ConversationSidebar({
   activeConversationId,
@@ -13,12 +12,14 @@ export default function ConversationSidebar({
   isOpen,
   onToggle,
   onOpenLibrary,
+  onGoHome,
   theme,
   onToggleTheme,
 }) {
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -42,6 +43,10 @@ export default function ConversationSidebar({
       cancelled = true;
     };
   }, [refreshKey]);
+
+  const filteredConversations = conversations.filter((c) =>
+    (c.title || "New research").toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   if (!isOpen) {
     return (
@@ -75,9 +80,14 @@ export default function ConversationSidebar({
   return (
     <div className="conversation-sidebar">
       <div className="sidebar-header">
-        <div className="sidebar-logo">
-          <span className="axiom-logo-mark" style={{ marginRight: "0.5rem" }}>▲</span>
-          AXIOM / RAG
+        <div
+          className="sidebar-logo"
+          onClick={onGoHome}
+          title="Return to Home Landing Page"
+          style={{ cursor: "pointer" }}
+        >
+          <span className="synapse-logo-badge" style={{ width: "24px", height: "24px", fontSize: "0.85rem", marginRight: "0.5rem" }}>✦</span>
+          <span>SYNAPSE<strong>DOCS</strong></span>
         </div>
         <button
           className="sidebar-toggle-btn"
@@ -99,17 +109,29 @@ export default function ConversationSidebar({
       </div>
 
       <div className="sidebar-actions">
+        <button
+          type="button"
+          className="sidebar-home-link-btn"
+          onClick={onGoHome}
+          title="Back to Landing Page"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: "0.5rem" }}>
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+            <polyline points="9 22 9 12 15 12 15 22"></polyline>
+          </svg>
+          Home Landing Page
+        </button>
         <button type="button" className="new-chat-btn-dark" onClick={onNewChat}>
           <span
             style={{
               fontSize: "1.2rem",
               marginRight: "0.5rem",
-              fontWeight: "300",
+              fontWeight: "400",
             }}
           >
             +
           </span>{" "}
-          New research
+          New Research
           <span className="shortcut-hint">⌘N</span>
         </button>
         <button
@@ -131,12 +153,31 @@ export default function ConversationSidebar({
             <line x1="12" y1="18" x2="12" y2="12"></line>
             <polyline points="9 15 12 12 15 15"></polyline>
           </svg>
-          Upload documents
+          Document Library
         </button>
       </div>
 
       <div className="sidebar-conversations">
-        <span className="sidebar-label">CONVERSATIONS</span>
+        <div style={{ padding: "0 1rem 0.5rem" }}>
+          <input
+            type="text"
+            placeholder="Search sessions..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              padding: "0.45rem 0.75rem",
+              fontSize: "0.8rem",
+              borderRadius: "6px",
+              border: "1px solid var(--border)",
+              background: "var(--surface)",
+              color: "var(--ink)",
+            }}
+          />
+        </div>
+
+        <span className="sidebar-label">RESEARCH SESSIONS</span>
         {loading && (
           <p className="chat-empty-state" style={{ padding: "0 1rem" }}>
             Loading...
@@ -148,14 +189,14 @@ export default function ConversationSidebar({
           </div>
         )}
 
-        {!loading && !error && conversations.length === 0 && (
+        {!loading && !error && filteredConversations.length === 0 && (
           <p className="chat-empty-state" style={{ padding: "0 1rem" }}>
-            No conversations yet.
+            {searchQuery ? "No matching sessions" : "No sessions yet."}
           </p>
         )}
 
         <ul className="conversation-list">
-          {conversations.map((c) => (
+          {filteredConversations.map((c) => (
             <li key={c.id}>
               <button
                 type="button"
@@ -166,19 +207,19 @@ export default function ConversationSidebar({
                     : "")
                 }
                 onClick={() => onSelect(c.id)}
-                title={c.title || "Untitled conversation"}
+                title={c.title || "Untitled session"}
               >
                 <svg
-                  width="16"
-                  height="16"
+                  width="15"
+                  height="15"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="2"
                   style={{
-                    marginRight: "0.75rem",
+                    marginRight: "0.6rem",
                     flexShrink: 0,
-                    opacity: 0.5,
+                    opacity: 0.6,
                   }}
                 >
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
@@ -195,7 +236,7 @@ export default function ConversationSidebar({
       {user && (
         <div className="sidebar-footer">
           <div className="sidebar-footer-toggle-row">
-            <BB8Toggle theme={theme} onToggle={onToggleTheme} size="sm" />
+            <ThemeToggle theme={theme} onToggle={onToggleTheme} />
           </div>
           <div className="sidebar-footer-user-row">
             <div className="user-info">
@@ -204,7 +245,9 @@ export default function ConversationSidebar({
               </div>
               <div className="user-details">
                 <span className="user-email-text">{user.email}</span>
-                <span className="user-status-text">SIGNED IN</span>
+                <span className="user-status-text">
+                  {user.is_guest ? "GUEST SESSION" : "AUTHENTICATED"}
+                </span>
               </div>
             </div>
             <button
@@ -232,3 +275,4 @@ export default function ConversationSidebar({
     </div>
   );
 }
+

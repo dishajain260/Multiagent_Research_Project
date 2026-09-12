@@ -1,174 +1,117 @@
-# Axiom RAG: Autonomous Multi-Agent Document Intelligence Engine
+# SynapseDocs AI: Autonomous Multi-Agent Document Intelligence & Research Platform
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111%2B-009688.svg)](https://fastapi.tiangolo.com/)
 [![LangGraph](https://img.shields.io/badge/LangGraph-Multi--Agent-orange.svg)](https://langchain-ai.github.io/langgraph/)
 [![React](https://img.shields.io/badge/React-19-61DAFB.svg)](https://react.dev/)
+[![Author](https://img.shields.io/badge/Author-Disha%20Jain-6366f1.svg)](https://github.com/dishajain260)
 
-A production-grade, multi-user **Retrieval-Augmented Generation (RAG)** system engineered to ingest complex PDFs, including multi-row tables, synthesize answers with grounded source citations, and **autonomously self-correct** low-quality or hallucinated drafts through an automated critique-and-retry loop.
+**SynapseDocs AI** is an enterprise-grade autonomous **Retrieval-Augmented Generation (RAG)** platform designed to ingest complex PDF documents (including multi-row financial and technical tables), perform self-correcting vector retrieval via **LangGraph**, and synthesize cited answers with automated critique fact-checking.
 
-Built with **LangGraph**, **FastAPI**, **Qdrant Cloud**, **Neon Serverless PostgreSQL**, and a modern **React (Vite)** interface.
-
----
-
-## Key Highlights
-
-* **Multi-Agent Orchestration**: Specialized LangGraph nodes for query rewriting, dense retrieval, grounded synthesis, and fact-checking.
-
-* **Table-Aware Hierarchical Ingestion**: Row-based table chunking that repeats headers across splits, preventing table fragmentation.
-
-* **Interactive Citation Inspector**: Inspect exact vector matches, similarity scores, page numbers, and parent contexts in real time.
-
-* **Whole-Document Map-Reduce Summarization**: Bypasses nearest-neighbor search to aggregate full-document coverage with adaptive rate-limit backoff.
-
-* **Strict Multi-Tenant Isolation**: Deterministic point IDs and indexed payload filters structurally prevent cross-user data leakage.
-
-* **Production Resilience**: Solved cross-event-loop database collisions, Hugging Face proxy CORS preflight stripping, and constrained-memory OOMs.
+Developed by **[Disha Jain](https://github.com/dishajain260)**.
 
 ---
 
-## Architecture Overview
+## 🌟 Key Technical Highlights
 
-Axiom RAG executes as a **LangGraph state machine** with conditional routing and safety short-circuits:
+* **Autonomous Multi-Agent Orchestration**: Specialized LangGraph state graph with dedicated nodes for Conversational Disambiguation, Dense Vector Search, Grounded Synthesis, and JSON Schema Critique Verification.
+* **Table-Aware Row-Boundary Chunking**: Utilizes PyMuPDF's `find_tables()` to detect tables, repeat header rows across chunk boundaries, and prevent tabular fragmentation during embedding.
+* **Self-Correcting Critique & Retry Loop**: Answers are audited by a critique agent against retrieved source chunks; low completeness or ungrounded claims trigger widening retries (`top_k=8 → 10`).
+* **Interactive Citation Inspector & Report Export**: Click any cited source to inspect exact vector matches, similarity scores, page numbers, and chunk text in real time. Export full research briefs to Markdown (`.md`).
+* **Multi-Tenant Vector & Relational Isolation**: Deterministic point IDs (`md5(user_id + ":" + chunk_id)`) and indexed Qdrant payload filters structurally enforce cross-user privacy.
+* **Serverless Scale Architecture**: FastEmbed ONNX runtime for ultra-low memory footprints, Neon Serverless PostgreSQL for session history, and Groq Cloud LPU inference.
+
+---
+
+## 📐 Architecture & Agent Topology
 
 ```mermaid
 flowchart TD
-
-    START(["User Query"]) --> REWRITE["Query Rewrite Agent<br/>Resolves follow-ups and pronouns"]
-
+    START(["User Query"]) --> REWRITE["Query Rewrite Agent<br/>(Resolves pronouns & follow-ups)"]
     REWRITE --> DETECT{"Summary Request?"}
-
-    DETECT -->|Yes| SCROLL["Qdrant scroll API<br/>Fetches all chunks in reading order"]
-
-    SCROLL --> MAPREDUCE["Map-Reduce Summarizer<br/>Batches summarized with adaptive delays<br/>Then reduced into final brief"]
-
-    MAPREDUCE --> DONE(["Save and Stream Result"])
-
-    DETECT -->|No| RESEARCH["Research Agent<br/>Vector similarity search in Qdrant<br/>Strictly scoped by user ID and document"]
-
-    RESEARCH --> SYNTH["Synthesis Agent<br/>Grounded answer with page citations"]
-
-    SYNTH --> CRITIQUE["Critique Agent<br/>Strict JSON schema fact-checker"]
-
-    CRITIQUE --> DECISION{"Passed?"}
-
+    
+    DETECT -->|Yes| SCROLL["Qdrant Scroll API<br/>(Fetches all chunks in order)"]
+    SCROLL --> MAPREDUCE["Map-Reduce Summarizer<br/>(Batch summarization & reduce)"]
+    MAPREDUCE --> DONE(["Save & Stream Verified Result"])
+    
+    DETECT -->|No| RESEARCH["Research Agent<br/>(Scoped vector search in Qdrant)"]
+    RESEARCH --> SYNTH["Synthesis Agent<br/>(Grounded answers with page citations)"]
+    SYNTH --> CRITIQUE["Critique Agent<br/>(Strict JSON schema fact-checker)"]
+    
+    CRITIQUE --> DECISION{"Critique Passed?"}
     DECISION -->|Yes| DONE
-
-    DECISION -->|No, revisions less than 3| RETRY["Widen top-k 8 to 10<br/>Trigger LangGraph retry loop"]
-
+    DECISION -->|No, revisions < 3| RETRY["Widen top-k 8 → 10<br/>(Auto-retry with enriched query)"]
     RETRY --> RESEARCH
-
-    DECISION -->|No, revisions equal 3| GIVEUP(["Best-Effort Answer<br/>Tagged as Unverified"])
-
-    DECISION -->|API rate limit or 413 error| GIVEUP
-
-    style REWRITE fill:#4f46e5,color:#fff
-    style RESEARCH fill:#4f46e5,color:#fff
-    style SYNTH fill:#4f46e5,color:#fff
-    style CRITIQUE fill:#4f46e5,color:#fff
-    style MAPREDUCE fill:#4f46e5,color:#fff
+    DECISION -->|No, revisions = 3| FALLBACK(["Best-Effort Answer<br/>(Flagged as unverified)"])
+    
+    style REWRITE fill:#6366f1,color:#fff
+    style RESEARCH fill:#6366f1,color:#fff
+    style SYNTH fill:#6366f1,color:#fff
+    style CRITIQUE fill:#8b5cf6,color:#fff
+    style MAPREDUCE fill:#6366f1,color:#fff
     style DONE fill:#10b981,color:#fff
-    style GIVEUP fill:#f59e0b,color:#000
+    style FALLBACK fill:#f59e0b,color:#000
 ```
 
 ---
 
-## Agent Responsibilities
+## 🤖 Agent Roles & Capabilities
 
-| Agent Node         | Model / Provider                | Primary Responsibility                                                                                                          |
-| :----------------- | :------------------------------ | :------------------------------------------------------------------------------------------------------------------------------ |
-| **Query Rewrite**  | Groq `llama-3.1-8b-instant`     | Rephrases conversational follow-up questions such as *"what about that one?"* into standalone search queries using prior turns. |
-| **Research Node**  | `fastembed` ONNX + Qdrant Cloud | Embeds search queries and executes filtered vector search scoped to `user_id` and `source_file`.                                |
-| **Synthesis Node** | `openai/gpt-oss-120b` (Groq)    | Synthesizes comprehensive answers using strictly the retrieved context. Includes page citations such as `(page 3)`.             |
-| **Critique Node**  | `openai/gpt-oss-120b` (Groq)    | Uses strict JSON structured output (`{passed: bool, feedback: str}`) to verify grounding, relevance, and completeness.          |
-| **Summarizer**     | `openai/gpt-oss-120b` (Groq)    | Executes map-reduce over approximately 4,500-word batches with exponential backoff for full-document synthesis.                 |
-
----
-
-## Engineering Deep Dive: Hard Problems Solved
-
-### 1. Multi-Tenant Vector Isolation & Deterministic Upserts
-
-* **Problem**: In multi-user RAG, user A querying the vector store could accidentally retrieve chunks from user B, and two users uploading `report.pdf` could overwrite each other if point IDs were based on filename alone.
-
-* **Solution**: Point IDs are generated deterministically as `md5(user_id + ":" + chunk_id)`. Both `source_file` and `user_id` are indexed payload fields in Qdrant. Retrieval enforces an `AND` filter on `user_id`, guaranteeing structural data isolation.
-
-### 2. Table-Aware Ingestion with Header Propagation
-
-* **Problem**: Conventional character splitters slice tables arbitrarily, cutting rows in half and separating cell data from column headers.
-
-* **Solution**: PyMuPDF extracts tables via `find_tables()`. The table chunker splits purely on row boundaries, up to 15 rows, and **repeats the column header row on every child chunk**, keeping table slices semantically valid when embedded.
-
-### 3. Cross-Event-Loop Connection Safety
-
-* **Problem**: In FastAPI, sync route wrappers calling `asyncio.run()` with standard SQLAlchemy connection pools caused `asyncpg` to crash with `Task attached to a different loop` across keep-alive requests.
-
-* **Solution**: Switched the database engine to `NullPool` and isolated database executions inside a dedicated thread worker pool.
-
-### 4. Memory Footprint Optimization
-
-* **Problem**: Running heavy PyTorch embedding pipelines using `sentence-transformers` routinely triggered out-of-memory crashes on resource-constrained containers with a 512 MB RAM ceiling.
-
-* **Solution**: Migrated to `fastembed` with ONNX Runtime, cutting memory usage by over 70% and lazy-loading the model on first request rather than blocking container startup.
+| Agent Node | Technology / Model | Core Function |
+| :--- | :--- | :--- |
+| **Query Rewrite** | Groq `llama-3.1-8b-instant` | Resolves conversational follow-up questions (e.g., *"what about the revenue growth?"*) into standalone search queries using past turns. |
+| **Research Node** | `fastembed` ONNX + Qdrant Cloud | Embeds queries locally via ONNX Runtime (`BAAI/bge-small-en-v1.5`) and executes filtered vector search scoped to `user_id` and `source_file`. |
+| **Synthesis Node** | `openai/gpt-oss-120b` (Groq) | Synthesizes comprehensive answers strictly grounded in retrieved passages with exact page citations `(Page X)`. |
+| **Critique Node** | `openai/gpt-oss-120b` (Groq) | Enforces structured JSON validation (`{passed: bool, feedback: str}`) to verify grounding, accuracy, and relevance. |
+| **Summarizer** | `openai/gpt-oss-120b` (Groq) | Runs whole-document Map-Reduce over ~4,500-word batches for complete document coverage. |
 
 ---
 
-## Tech Stack
+## 📊 Evaluation & Benchmarks (RAGAS)
 
-* **Orchestration**: LangGraph, LangChain Text Splitters
-* **LLM Runtime**: Groq API (`gpt-oss-120b`, `llama-3.1-8b-instant`)
-* **Embedding Engine**: FastEmbed (`BAAI/bge-small-en-v1.5`) ONNX
-* **Vector Database**: Qdrant Cloud (Cosine metric, indexed payload filtering)
-* **Relational Store**: Neon Serverless PostgreSQL, SQLAlchemy 2.0 (async + `NullPool`)
-* **Backend API**: FastAPI, Pydantic v2, Server-Sent Events (SSE)
-* **Frontend Client**: React 19, Vite, React Markdown, Remark GFM
-* **Evaluation**: RAGAS (Faithfulness, Answer Relevancy, Context Precision, Context Recall)
+Evaluated against comprehensive single-hop, multi-hop, and out-of-scope query suites:
 
----
-
-## Evaluation Results
-
-Axiom RAG was evaluated against a diverse test suite of single-hop, multi-hop, and negative/out-of-scope questions:
-
-| Metric                | Score     | Interpretation                                      |
-| :-------------------- | :-------- | :-------------------------------------------------- |
-| **Faithfulness**      | **0.954** | High grounding with minimal unsupported claims.     |
-| **Answer Relevancy**  | **0.795** | Concise, direct answers without unnecessary filler. |
-| **Context Precision** | **0.724** | High signal-to-noise ratio in retrieved context.    |
-| **Context Recall**    | **1.000** | Complete retrieval of required source facts.        |
+| Metric | Score | Assessment |
+| :--- | :--- | :--- |
+| **Faithfulness** | **0.954** | Exceptional claim grounding with minimal unsupported statements. |
+| **Answer Relevancy** | **0.795** | Concise, direct answers without unnecessary filler. |
+| **Context Precision** | **0.724** | High signal-to-noise ratio in retrieved context chunks. |
+| **Context Recall** | **1.000** | Complete capture of required reference facts from source PDFs. |
 
 ---
 
-## Running Locally
+## 💻 Tech Stack
+
+* **Agent Orchestration**: LangGraph, LangChain
+* **LLM Provider**: Groq Cloud API (`gpt-oss-120b`, `llama-3.1-8b-instant`)
+* **Embedding Model**: FastEmbed ONNX Runtime (`BAAI/bge-small-en-v1.5`)
+* **Vector Store**: Qdrant Cloud (Cosine metric, indexed payload filtering)
+* **Relational Database**: Neon Serverless PostgreSQL, SQLAlchemy 2.0 (async + `NullPool`)
+* **Backend Framework**: FastAPI, Pydantic v2, Server-Sent Events (SSE)
+* **Frontend**: React 19, Vite, React Markdown, Remark GFM
+* **Auth**: Stateless JWT Bearer tokens + 1-click Demo guest sessions
+
+---
+
+## 🚀 Quick Start Guide
 
 ### 1. Prerequisites
-
 * Python 3.10+
 * Node.js 18+
-* Accounts for Groq, Qdrant Cloud, and Neon Postgres
+* API keys for Groq, Qdrant Cloud, and Neon PostgreSQL
 
 ### 2. Backend Setup
 
 ```bash
 cd backend
 
-python -m venv .venv
+# Create or activate virtual environment
+source venv/bin/activate
 
-source .venv/bin/activate
-
+# Install dependencies
 pip install -r requirements.txt
 
-# Create your .env file
-cp .env.example .env
-
-# Configure:
-# GROQ_API_KEY=your_groq_key
-# QDRANT_URL=your_qdrant_url
-# QDRANT_API_KEY=your_qdrant_key
-# DATABASE_URL=postgresql+asyncpg://user:pass@ep-xyz.neon.tech/neondb
-# JWT_SECRET_KEY=your_random_secret_hex
-
-# Start the server
+# Start the FastAPI server
 uvicorn api.main:app --reload --port 8000
 ```
 
@@ -177,12 +120,20 @@ uvicorn api.main:app --reload --port 8000
 ```bash
 cd frontend
 
+# Install dependencies
 npm install
 
-# Configure .env
-# VITE_API_BASE_URL=http://localhost:8000
-
+# Start Vite dev server
 npm run dev
 ```
 
-Open `http://localhost:5173` to enter the Axiom research workspace.
+Open `http://localhost:5173` to access the SynapseDocs AI workspace.
+
+---
+
+## 👤 Author
+
+**Disha Jain**  
+GitHub: [@dishajain260](https://github.com/dishajain260)  
+Repository: [Multiagent_Research_Project](https://github.com/dishajain260/Multiagent_Research_Project)
+

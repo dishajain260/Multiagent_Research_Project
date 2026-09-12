@@ -13,9 +13,9 @@ from api.routes_conversations import router as conversations_router
 from db.database import init_db
 
 app = FastAPI(
-    title="Axiom RAG - Autonomous Multi-Agent Research Assistant",
-    description="Enterprise-grade autonomous multi-agent Retrieval-Augmented Generation engine. Ingests complex PDFs with table-aware chunking, performs self-correcting retrieval via LangGraph, and generates cited verified synthesis.",
-    version="1.0.0",
+    title="SynapseDocs AI - Autonomous Multi-Agent Research Platform",
+    description="Enterprise-grade autonomous multi-agent Retrieval-Augmented Generation engine by Disha Jain. Ingests complex PDFs with table-aware chunking, performs self-correcting retrieval via LangGraph, and generates cited verified synthesis.",
+    version="2.0.0",
 )
 
 # CORS: allow the deployed Vercel frontend (production + preview URLs).

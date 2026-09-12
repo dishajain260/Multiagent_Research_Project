@@ -46,6 +46,9 @@ export default function App() {
     setTheme((t) => (t === "dark" ? "light" : "dark"));
   }, []);
 
+  // View mode: 'workspace' | 'home' | 'auth'
+  const [viewMode, setViewMode] = useState("workspace");
+
   // On phones/small tablets, start with the sidebar collapsed so it
   // doesn't cover the whole screen on first load. Desktop keeps it open.
   useEffect(() => {
@@ -85,19 +88,35 @@ export default function App() {
     setSidebarRefreshKey((k) => k + 1);
   }, []);
 
+  // When user is authenticated (login, signup, guest demo), automatically make sure viewMode is 'workspace' and showAuth is false
+  useEffect(() => {
+    if (user && (viewMode === "auth" || showAuth)) {
+      setShowAuth(false);
+      setViewMode("workspace");
+    }
+  }, [user, viewMode, showAuth]);
+
   if (loading) {
     return (
       <div className="app">
-        <p className="chat-empty-state">Loading...</p>
+        <p className="chat-empty-state">Loading SynapseDocs AI...</p>
       </div>
     );
   }
 
+  // Not logged in: show either AuthPage or CoverPage
   if (!user) {
-    if (showAuth) {
+    if (viewMode === "auth" || showAuth) {
       return (
         <AuthPage
-          onBack={() => setShowAuth(false)}
+          onSuccess={() => {
+            setShowAuth(false);
+            setViewMode("workspace");
+          }}
+          onBack={() => {
+            setShowAuth(false);
+            setViewMode("home");
+          }}
           theme={theme}
           onToggleTheme={toggleTheme}
         />
@@ -105,13 +124,33 @@ export default function App() {
     }
     return (
       <CoverPage
-        onEnterWorkspace={() => setShowAuth(true)}
+        onEnterWorkspace={() => {
+          setShowAuth(true);
+          setViewMode("auth");
+        }}
+        isLoggedIn={false}
         theme={theme}
         onToggleTheme={toggleTheme}
       />
     );
   }
 
+  // Logged-in user explicitly clicked "Home / Landing"
+  if (viewMode === "home") {
+    return (
+      <CoverPage
+        onEnterWorkspace={() => {
+          setViewMode("workspace");
+        }}
+        isLoggedIn={true}
+        userEmail={user?.email}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+      />
+    );
+  }
+
+  // Logged-in user in active research workspace
   return (
     <div className="app-dashboard">
       <GuestBanner />
@@ -132,11 +171,72 @@ export default function App() {
           isOpen={sidebarOpen}
           onToggle={() => setSidebarOpen(!sidebarOpen)}
           onOpenLibrary={() => setRightPanelOpen(true)}
+          onGoHome={() => setViewMode("home")}
           theme={theme}
           onToggleTheme={toggleTheme}
         />
 
         <div className="dashboard-main">
+          {/* Workspace Top Bar */}
+          <div className="workspace-top-bar">
+            <div className="workspace-top-left">
+              {!sidebarOpen && (
+                <button
+                  type="button"
+                  className="top-bar-icon-btn"
+                  onClick={() => setSidebarOpen(true)}
+                  title="Open Sidebar"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="9" y1="3" x2="9" y2="21"></line>
+                  </svg>
+                </button>
+              )}
+              <button
+                type="button"
+                className="top-bar-home-btn"
+                onClick={() => setViewMode("home")}
+                title="Go to Home Landing Page"
+              >
+                <span className="synapse-logo-badge" style={{ width: "22px", height: "22px", fontSize: "0.8rem", marginRight: "0.4rem" }}>✦</span>
+                <span className="top-bar-brand-name">SYNAPSE<strong>DOCS</strong></span>
+                <span className="top-bar-badge">&larr; Home</span>
+              </button>
+              {lastUploadedFile && (
+                <span className="scope-indicator-pill">
+                  📄 {lastUploadedFile}
+                </span>
+              )}
+            </div>
+
+            <div className="workspace-top-right">
+              <button
+                type="button"
+                className="top-bar-action-btn"
+                onClick={() => setRightPanelOpen(true)}
+                title="Document Library"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <polyline points="14 2 14 8 20 8"></polyline>
+                  <line x1="12" y1="18" x2="12" y2="12"></line>
+                  <polyline points="9 15 12 12 15 15"></polyline>
+                </svg>
+                <span>Documents</span>
+              </button>
+              <button
+                type="button"
+                className="top-bar-action-btn primary"
+                onClick={handleNewChat}
+                title="New Research Session"
+              >
+                <span>+ New</span>
+              </button>
+              <ThemeToggle theme={theme} onToggle={toggleTheme} />
+            </div>
+          </div>
+
           {loadingConversation ? (
             <div className="chat-panel">
               <p className="chat-empty-state">Loading conversation...</p>
@@ -149,6 +249,8 @@ export default function App() {
               loadKey={loadKey}
               onConversationIdChange={handleConversationIdChange}
               onMessageSent={handleMessageSent}
+              onOpenLibrary={() => setRightPanelOpen(true)}
+              onGoHome={() => setViewMode("home")}
             />
           )}
         </div>

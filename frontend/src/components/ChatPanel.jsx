@@ -138,13 +138,13 @@ export default function ChatPanel({
       <div className="chat-messages">
         {messages.length === 0 ? (
           <div className="chat-empty-state-full">
-            <span className="chat-hero-label">§ NEW RESEARCH SESSION</span>
+            <span className="chat-hero-label">AUTONOMOUS RESEARCH WORKSPACE</span>
             <h1 className="chat-hero-title">
-              What are we <span className="italic-serif">investigating?</span>
+              What are we <span className="gradient-text">investigating today?</span>
             </h1>
             <p className="chat-hero-desc">
-              Ask a question in plain English. Axiom's agents will plan, retrieve<br/>
-              from your library, and verify citations as they go.
+              Ask any research question. SynapseDocs agents will retrieve from your indexed
+              library, synthesize findings, and verify citations autonomously.
             </p>
 
             <div className="chat-input-hero">
@@ -152,16 +152,16 @@ export default function ChatPanel({
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="e.g. What are the state-of-the-art methods in multi-agent RAG systems?"
+                placeholder="e.g., Synthesize the key quantitative findings and compare the experimental methodologies across our uploaded papers."
                 rows={3}
               />
               <div className="chat-input-hero-footer">
                 <div className="chat-shortcuts">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 10l-5 5 5 5"></path><path d="M20 4v7a4 4 0 0 1-4 4H4"></path></svg> TO SEND &middot; 
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{marginLeft: '0.5rem'}}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg> NEW LINE
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 10l-5 5 5 5"></path><path d="M20 4v7a4 4 0 0 1-4 4H4"></path></svg> RETURN TO SEND &middot; 
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{marginLeft: '0.5rem'}}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg> SHIFT+ENTER NEW LINE
                 </div>
                 <button className="chat-hero-btn" onClick={handleSend} disabled={loading || !input.trim()}>
-                  {loading ? "..." : "Begin research"} &rarr;
+                  {loading ? "..." : "Execute Research"} &rarr;
                 </button>
               </div>
             </div>

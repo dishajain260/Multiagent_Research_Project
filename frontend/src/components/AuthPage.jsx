@@ -1,16 +1,12 @@
 // AuthPage.jsx
-// Combined login/signup screen. This app has no router (App.jsx renders
-// everything as one page), so rather than two separately-routed pages this
-// is one component that toggles between the two modes — matches how the
-// rest of the app is structured, and there's no URL/back-button benefit to
-// splitting them here since there's nowhere else to navigate to anyway.
+// Combined login/signup screen with instant demo trial access.
 
 import { useState } from "react";
 import { useAuth } from "../context/useAuth";
-import BB8Toggle from "./BB8Toggle";
+import ThemeToggle from "./ThemeToggle";
 import "./AuthPage.css";
 
-export default function AuthPage({ onBack, theme, onToggleTheme }) {
+export default function AuthPage({ onSuccess, onBack, theme, onToggleTheme }) {
   const { login, signup, tryDemo } = useAuth();
   const [mode, setMode] = useState("login"); // "login" | "signup"
   const [email, setEmail] = useState("");
@@ -32,6 +28,7 @@ export default function AuthPage({ onBack, theme, onToggleTheme }) {
       } else {
         await signup(email, password);
       }
+      onSuccess?.();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -49,7 +46,7 @@ export default function AuthPage({ onBack, theme, onToggleTheme }) {
     setError("");
     try {
       await tryDemo();
-      // User will be automatically logged in and redirected via AuthContext
+      onSuccess?.();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -59,36 +56,54 @@ export default function AuthPage({ onBack, theme, onToggleTheme }) {
 
   return (
     <div className="auth-split-page">
+      {/* Left Branding Panel */}
       <div className="auth-left">
         <div className="auth-left-top">
           {onBack && (
             <button type="button" onClick={onBack} className="back-link">
-              &larr; BACK TO COVER
+              &larr; BACK TO HOME
             </button>
           )}
-          <BB8Toggle theme={theme} onToggle={onToggleTheme} size="sm" />
+          <ThemeToggle theme={theme} onToggle={onToggleTheme} />
         </div>
+
         <div className="auth-left-content">
-          <span className="library-card-label">THE RESEARCH PORTAL</span>
+          <div className="auth-badge-pill">RESEARCH PORTAL</div>
           <h1 className="auth-heading">
-            Welcome to <span className="italic-serif">Axiom</span>.
+            Welcome to <span className="gradient-text">SynapseDocs</span>.
           </h1>
           <p className="auth-desc">
-            An autonomous workspace where multiple research agents verify your
-            documents and questions. Sign in to open your workspace.
+            An autonomous multi-agent intelligence workspace. Ingest documents,
+            query structured tables, and get citation-backed answers with automated critique verification.
           </p>
+          <div className="auth-feature-list">
+            <div className="auth-feature-item">
+              <span className="check-icon">✓</span>
+              <span>Table-aware chunking &amp; isolated vector retrieval</span>
+            </div>
+            <div className="auth-feature-item">
+              <span className="check-icon">✓</span>
+              <span>Self-correcting LangGraph critique loop</span>
+            </div>
+            <div className="auth-feature-item">
+              <span className="check-icon">✓</span>
+              <span>Persistent multi-user conversation history</span>
+            </div>
+          </div>
         </div>
+
         <div className="auth-left-footer">
-          <span>VOL. 01</span>
-          <span>EST. MMXXVI</span>
+          <span>SYNAPSEDOCS AI</span>
+          <span>ENTERPRISE RESEARCH PLATFORM</span>
         </div>
       </div>
 
+      {/* Right Form Panel */}
       <div className="auth-right">
         <div className="auth-form-container">
           <div className="auth-logo">
-            <span className="axiom-logo-mark" style={{ marginRight: "0.5rem" }}>▲</span>
-            AXIOM / RAG
+            <span className="synapse-logo-badge">✦</span>
+            <span>SYNAPSE<strong>DOCS</strong></span>
           </div>
 
           <div className="auth-tabs">
@@ -109,23 +124,23 @@ export default function AuthPage({ onBack, theme, onToggleTheme }) {
           </div>
 
           <h2 className="auth-title">
-            {mode === "login" ? "Sign in" : "Create account"}
+            {mode === "login" ? "Sign in to workspace" : "Create your account"}
           </h2>
           <p className="auth-subtitle">
             {mode === "login"
-              ? "Continue to your research library."
-              : "Start your research library."}
+              ? "Access your indexed documents and research history."
+              : "Set up your private research intelligence library."}
           </p>
 
           <form onSubmit={handleSubmit} className="auth-form-styled">
             <div className="input-group">
-              <label htmlFor="auth-email">EMAIL</label>
+              <label htmlFor="auth-email">EMAIL ADDRESS</label>
               <input
                 id="auth-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@library.com"
+                placeholder="name@organization.com"
                 autoComplete="email"
                 required
               />
@@ -158,15 +173,15 @@ export default function AuthPage({ onBack, theme, onToggleTheme }) {
               {submitting
                 ? mode === "login"
                   ? "Signing in..."
-                  : "Creating..."
+                  : "Creating account..."
                 : mode === "login"
-                  ? "Sign in"
-                  : "Create account"}
+                  ? "Sign in to Workspace →"
+                  : "Create Account →"}
             </button>
           </form>
 
           <div className="demo-divider">
-            <span>or</span>
+            <span>OR TRY WITHOUT SIGNUP</span>
           </div>
 
           <button
@@ -175,20 +190,20 @@ export default function AuthPage({ onBack, theme, onToggleTheme }) {
             disabled={demoLoading}
             className="demo-btn"
           >
-            {demoLoading ? "⏳ Creating demo..." : "🚀 Try Demo"}
+            {demoLoading ? "⏳ Creating demo session..." : "🚀 Launch Instant Demo"}
           </button>
           <p className="demo-note">
-            No signup required • Full access • 24 hour workspace
+            Instant 24-hour workspace &bull; Upload documents &bull; Full multi-agent access
           </p>
 
           <p className="auth-toggle-text">
-            {mode === "login" ? "New to Axiom? " : "Already have an account? "}
+            {mode === "login" ? "Don't have an account yet? " : "Already have an account? "}
             <button
               type="button"
               className="auth-toggle-inline"
               onClick={toggleMode}
             >
-              {mode === "login" ? "Create one" : "Sign in"}
+              {mode === "login" ? "Create one here" : "Sign in here"}
             </button>
           </p>
         </div>
@@ -196,3 +211,4 @@ export default function AuthPage({ onBack, theme, onToggleTheme }) {
     </div>
   );
 }
+
